@@ -1,24 +1,14 @@
 use std::env;
 use std::fs;
-use std::io::{Write};
+use std::io::Write;
 use std::process::Command;
 
-use anyhow::{Context, Result, anyhow};
+use anyhow::{anyhow, Context, Result};
 use rayon::prelude::*;
 use tempfile::NamedTempFile;
 
 use crate::filesystem::{convert_paths_to_string, get_sorted_paths};
-use crate::regex::find_pattern;
-
-// pub fn bulk_rename(from: &[String], to: &[&str]) -> Result<()> {
-//     assert_eq!(from.len(), to.len());
-
-//     from.into_par_iter()
-//         .zip(to.into_par_iter())
-//         .for_each(|(f, t)| fs::rename(f, t).unwrap());
-
-//     Ok(())
-// }
+use crate::regex::{create_regex, find_match};
 
 pub struct EditorRename {
     editor: String,
@@ -35,7 +25,12 @@ impl EditorRename {
         let mut file = NamedTempFile::new().context("Failed to create named tempfile")?;
         let paths = get_sorted_paths("./")?;
         let path_str_iter = convert_paths_to_string(paths).filter_map(|r| r.ok());
-        let matches = find_pattern(path_str_iter, pattern);
+        let matches = if let Some(pattern) = pattern {
+            let regex = create_regex(pattern)?;
+            find_match(path_str_iter, regex)
+        } else {
+            path_str_iter.collect()
+        };
 
         write!(file, "{}", matches.join("\n")).context(format!(
             "Failed to write to temp file {}",
@@ -49,6 +44,8 @@ impl EditorRename {
         })
     }
 
+    /// open file with $EDITOR or vim.
+    /// Return weather it exited successfully
     pub fn open_editor(&self) -> Result<()> {
         let file_path = self.file.path();
         let mut child = Command::new(&self.editor)
@@ -77,6 +74,7 @@ impl EditorRename {
         Ok(())
     }
 
+    /// rename all files using the tempfile that the user edited
     pub fn rename_using_file(&self) -> Result<()> {
         let contents = fs::read_to_string(self.file.path())?;
         let vec_contents = contents.lines().collect::<Vec<_>>();
@@ -85,13 +83,16 @@ impl EditorRename {
             return Err(anyhow!(
                 "Do not delete or add lines from the file, only change them."
             ));
-        } else if self.path_strs == vec_contents {
-            return Ok(())
         }
 
-        self.path_strs.par_iter()
+        self.path_strs
+            .par_iter()
             .zip(vec_contents.par_iter())
-            .for_each(|(f, t)| fs::rename(f, t).unwrap());
+            .for_each(|(f, t)| {
+                if f != t {
+                    fs::rename(f, t).unwrap();
+                }
+            });
 
         Ok(())
     }
