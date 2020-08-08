@@ -1,8 +1,9 @@
-mod bulk_rename;
+mod editor_rename;
 mod exit_codes;
 mod filesystem;
 mod opt;
 mod regex;
+mod replace_rename;
 
 use std::process;
 
@@ -10,7 +11,7 @@ use anyhow::{anyhow, Context, Result};
 use rayon::prelude::*;
 use structopt::StructOpt;
 
-use bulk_rename::EditorRename;
+use editor_rename::EditorRename;
 use exit_codes::ExitCode;
 use opt::Opt;
 
@@ -18,7 +19,7 @@ fn try_main(opt: Opt) -> Result<()> {
     if let Some(rename) = opt.rename {
         let pattern = opt
             .pattern
-            .context("--rename must be supplied if you are renaming with --pattern ")?;
+            .context("the pattern must if supplied if you are using the rename option")?;
     } else {
         let editor_rename = EditorRename::new(opt.pattern.as_ref())?;
         editor_rename.open_editor()?;

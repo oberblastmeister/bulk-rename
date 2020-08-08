@@ -4,28 +4,39 @@ use std::{fs, io};
 use anyhow::{anyhow, Context, Result};
 use rayon::prelude::*;
 
+pub fn get_string_paths_iter(
+    dir: impl AsRef<Path>,
+) -> Result<impl ParallelIterator<Item = String>> {
+    let paths = get_sorted_paths(dir)?;
+    Ok(convert_paths_to_string_iter(paths))
+}
+
 /// get paths in dir specified and return unstably sorted vector
-pub fn get_sorted_paths(dir: impl AsRef<Path>) -> Result<Vec<PathBuf>> {
+/// filter the paths that were returned successfully
+fn get_sorted_paths(dir: impl AsRef<Path>) -> Result<Vec<PathBuf>> {
     let mut entries = fs::read_dir(dir)?
         .collect::<Vec<_>>()
         .into_par_iter()
         .map(|res| res.map(|e| e.path()))
-        .collect::<Result<Vec<_>, io::Error>>()?;
+        .filter_map(|res| res.ok())
+        .collect::<Vec<_>>();
 
     entries.sort_unstable();
 
     Ok(entries)
 }
 
-pub fn convert_paths_to_string(
-    paths: Vec<PathBuf>,
-) -> impl IndexedParallelIterator<Item = Result<String>> {
-    paths.into_par_iter().map(|p| {
-        p.into_os_string()
-            .into_string()
-            .map_err(|_| anyhow!("Could not convert OsString to a utf-8 String"))
-            .map(|s| remove_front(s))
-    })
+/// converts pathbufs into strings, filters for the ones that were converted successfully
+fn convert_paths_to_string_iter(paths: Vec<PathBuf>) -> impl ParallelIterator<Item = String> {
+    paths
+        .into_par_iter()
+        .map(|p| {
+            p.into_os_string()
+                .into_string()
+                .map_err(|_| anyhow!("Could not convert OsString to a utf-8 String"))
+                .map(|s| remove_front(s))
+        })
+        .filter_map(|r| r.ok())
 }
 
 /// removes ./ at the front
@@ -35,6 +46,23 @@ fn remove_front(s: String) -> String {
     } else {
         s
     }
+}
+
+/// renames from slices instead of single items
+/// uses rayon to do it in parallel
+/// this functions returns all the errors that occurred when renaming files
+pub fn bulk_rename(from: &[String], to: &[&str]) -> Vec<anyhow::Error> {
+    from.par_iter()
+        .zip(to.par_iter())
+        .map(|(f, t)| {
+            if f != t {
+                fs::rename(f, t).context(format!("Failed to rename {} to {}", f, t))
+            } else {
+                Ok(())
+            }
+        })
+        .filter_map(|r| r.err())
+        .collect()
 }
 
 #[cfg(test)]
@@ -94,7 +122,7 @@ mod tests {
     #[test]
     fn convert_test() -> Result<()> {
         let paths = testing_pathbufs_from_strs(testing_strs_dot());
-        let items = convert_paths_to_string(paths).collect::<Result<Vec<String>>>()?;
+        let items = convert_paths_to_string_iter(paths).collect::<Result<Vec<String>>>()?;
 
         assert_eq!(items, testing_strs());
 
