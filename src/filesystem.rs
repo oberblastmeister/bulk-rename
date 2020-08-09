@@ -1,14 +1,14 @@
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::Arc;
 use std::{fs, io};
 
 use anyhow::{anyhow, Context, Result};
 use rayon::prelude::*;
 
-pub fn get_string_paths_iter(
-    dir: impl AsRef<Path>,
-) -> Result<impl ParallelIterator<Item = String>> {
+pub fn get_string_paths(dir: impl AsRef<Path>, allow_hidden: bool) -> Result<Vec<String>> {
     let paths = get_sorted_paths(dir)?;
-    Ok(convert_paths_to_string_iter(paths))
+    Ok(convert_paths_to_string_iter(paths, allow_hidden))
 }
 
 /// get paths in dir specified and return unstably sorted vector
@@ -27,25 +27,50 @@ fn get_sorted_paths(dir: impl AsRef<Path>) -> Result<Vec<PathBuf>> {
 }
 
 /// converts pathbufs into strings, filters for the ones that were converted successfully
-fn convert_paths_to_string_iter(paths: Vec<PathBuf>) -> impl ParallelIterator<Item = String> {
-    paths
+fn convert_paths_to_string_iter(paths: Vec<PathBuf>, allow_hidden: bool) -> Vec<String> {
+    let path_str_iter = paths
         .into_par_iter()
         .map(|p| {
+            let is_dir = p.is_dir();
             p.into_os_string()
                 .into_string()
                 .map_err(|_| anyhow!("Could not convert OsString to a utf-8 String"))
-                .map(|s| remove_front(s))
+                .map(|mut s| {
+                    remove_front(&mut s);
+                    if is_dir {
+                        add_dir_slash(&mut s)
+                    }
+                    s
+                })
         })
-        .filter_map(|r| r.ok())
+        .filter_map(|r| r.ok()); // only keep Ok values and also unwrap them
+
+        if !allow_hidden {
+            filter_hidden(path_str_iter).collect()
+        } else {
+            path_str_iter.collect()
+        }
+}
+
+pub fn filter_hidden(
+    iter: impl ParallelIterator<Item = String>,
+) -> impl ParallelIterator<Item = String> {
+    iter.filter(|s| !s.starts_with('.'))
+}
+
+fn is_hidden(s: &str) -> bool {
+    s.starts_with('.')
 }
 
 /// removes ./ at the front
-fn remove_front(s: String) -> String {
+fn remove_front(s: &mut String) {
     if s.starts_with("./") {
-        s.chars().skip(2).collect()
-    } else {
-        s
+        *s = s.chars().skip(2).collect()
     }
+}
+
+fn add_dir_slash(s: &mut String) {
+    s.push('/')
 }
 
 /// renames from slices instead of single items
@@ -61,7 +86,7 @@ pub fn bulk_rename(from: &[String], to: &[&str]) -> Vec<anyhow::Error> {
                 Ok(())
             }
         })
-        .filter_map(|r| r.err())
+        .filter_map(|r| r.err()) // only keep error values and unwrap_err them
         .collect()
 }
 

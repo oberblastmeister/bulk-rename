@@ -7,8 +7,7 @@ mod replace_rename;
 
 use std::process;
 
-use anyhow::{anyhow, Context, Result};
-use rayon::prelude::*;
+use anyhow::{Context, Result};
 use structopt::StructOpt;
 
 use editor_rename::EditorRename;
@@ -21,7 +20,7 @@ fn try_main(opt: Opt) -> Result<()> {
             .pattern
             .context("the pattern must if supplied if you are using the rename option")?;
     } else {
-        let editor_rename = EditorRename::new(opt.pattern.as_ref())?;
+        let editor_rename = EditorRename::new(opt.pattern.as_ref(), opt.hidden)?;
         editor_rename.open_editor()?;
         editor_rename.rename_using_file()?;
     }

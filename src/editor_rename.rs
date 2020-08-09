@@ -7,8 +7,9 @@ use anyhow::{bail, ensure, Context, Result};
 use rayon::prelude::*;
 use tempfile::NamedTempFile;
 
-use crate::filesystem::{bulk_rename, get_string_paths_iter};
-use crate::regex::{create_lazy_regex, filter_matches};
+use crate::filesystem::{bulk_rename, get_string_paths, filter_hidden};
+use crate::regex::filter_matches;
+use regex::Regex;
 
 pub struct EditorRename {
     editor: String,
@@ -17,20 +18,22 @@ pub struct EditorRename {
 }
 
 impl EditorRename {
-    pub fn new(pattern: Option<&String>) -> Result<EditorRename> {
+    pub fn new(pattern: Option<&String>, allow_hidden: bool) -> Result<EditorRename> {
         let editor = var("EDITOR").unwrap_or(var("VISUAL").unwrap_or(String::from("vi")));
 
         let mut file = NamedTempFile::new().context("Failed to create named tempfile")?;
+
         // get paths in dir and only get the ones that are utf-8 strings
-        let path_str_iter = get_string_paths_iter("./")?;
+        let path_strs = get_string_paths("./", allow_hidden)?;
 
         let matches = if let Some(pattern) = pattern {
-            let regex = create_lazy_regex(pattern)?;
-            filter_matches(path_str_iter, regex)
+            let regex = Regex::new(pattern)
+                .context(format!("Failed to create regex with pattern `{}`", pattern))?;
+            filter_matches(path_strs, regex)
         } else {
-            path_str_iter.collect()
+            path_strs
         };
-
+        
         write!(file, "{}", matches.join("\n")).context(format!(
             "Failed to write to temp file {}",
             file.path().display()
@@ -81,6 +84,10 @@ impl EditorRename {
             self.path_strs.len() == vec_contents.len(),
             "Do not delete or add lines from the file, only change them."
         );
+
+        if self.path_strs == vec_contents {
+            return Ok(());
+        }
 
         let errors = bulk_rename(&self.path_strs, &vec_contents);
         if !errors.is_empty() {
