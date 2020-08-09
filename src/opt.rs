@@ -4,10 +4,10 @@ use structopt::StructOpt;
 #[derive(Debug, StructOpt)]
 pub struct Opt {
     /// allow hidden directories to be shown
-    #[structopt(short, long)]
+    #[structopt(short = "H", long)]
     pub hidden: bool,
 
-    /// to search through directories recursively
+    /// search through directories recursively
     #[structopt(short = "R", long)]
     pub recursive: bool,
 

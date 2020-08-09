@@ -7,10 +7,11 @@ use anyhow::{bail, ensure, Context, Result};
 use rayon::prelude::*;
 use tempfile::NamedTempFile;
 
-use crate::filesystem::{bulk_rename, get_string_paths, filter_hidden};
+use crate::filesystem::{bulk_rename, get_string_paths};
 use crate::regex::filter_matches;
 use regex::Regex;
 
+/// Contains useful data to use for mass-renaming with a text-editor.
 pub struct EditorRename {
     editor: String,
     file: NamedTempFile,
@@ -46,8 +47,8 @@ impl EditorRename {
         })
     }
 
-    /// open file with $EDITOR or vim.
-    /// Return weather it exited successfully
+    /// Open the tempfile with $EDITOR, $VISUAL, or vi. This function returns weather the text-editor
+    /// exited successfuly.
     pub fn open_editor(&self) -> Result<()> {
         let file_path = self.file.path();
         let mut child = Command::new(&self.editor)
@@ -75,7 +76,7 @@ impl EditorRename {
         Ok(())
     }
 
-    /// rename all files using the tempfile that the user edited
+    /// Rename all files using the tempfile that the user edited.
     pub fn rename_using_file(&self) -> Result<()> {
         let contents = fs::read_to_string(self.file.path())?;
         let vec_contents = contents.lines().collect::<Vec<_>>();
@@ -89,18 +90,7 @@ impl EditorRename {
             return Ok(());
         }
 
-        let errors = bulk_rename(&self.path_strs, &vec_contents);
-        if !errors.is_empty() {
-            // join errors into one big error
-            bail!(
-                "\n{}",
-                errors
-                    .into_par_iter()
-                    .map(|e| format!("{:?}", e))
-                    .collect::<Vec<_>>()
-                    .join("\n\n[bulk-rename error]:\n")
-            );
-        }
+        let errors = bulk_rename(&self.path_strs, &vec_contents)?;
 
         Ok(())
     }

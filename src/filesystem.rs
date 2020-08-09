@@ -3,22 +3,30 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::{fs, io};
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{anyhow, Context, Result, bail};
 use rayon::prelude::*;
 
+use crate::errors::combine_errors;
+
+/// Gets a string representation of the paths in the specified directory.
 pub fn get_string_paths(dir: impl AsRef<Path>, allow_hidden: bool) -> Result<Vec<String>> {
     let paths = get_sorted_paths(dir)?;
     Ok(convert_paths_to_string_iter(paths, allow_hidden))
 }
 
-/// get paths in dir specified and return unstably sorted vector
-/// filter the paths that were returned successfully
+/// Get paths in directory specified and return unstably sorted vector.
+/// This function ignore any errors that occured and will print them to stderr.
 fn get_sorted_paths(dir: impl AsRef<Path>) -> Result<Vec<PathBuf>> {
     let mut entries = fs::read_dir(dir)?
         .collect::<Vec<_>>()
         .into_par_iter()
         .map(|res| res.map(|e| e.path()))
-        .filter_map(|res| res.ok())
+        .inspect(|res| {
+            if let Some(e) = res.as_ref().err() {
+                eprintln!("[bulk-rename error]: failed to read an entry, {:?}", e);
+            }
+        })
+        .filter_map(Result::ok)
         .collect::<Vec<_>>();
 
     entries.sort_unstable();
@@ -26,43 +34,52 @@ fn get_sorted_paths(dir: impl AsRef<Path>) -> Result<Vec<PathBuf>> {
     Ok(entries)
 }
 
-/// converts pathbufs into strings, filters for the ones that were converted successfully
+/// Converts PathBufs into Strings. This function applies some additional niceties like removing
+/// the ./ in front of the path and adding / at the end of a directory. This function also ignores
+/// errors and will print the to stderr.
 fn convert_paths_to_string_iter(paths: Vec<PathBuf>, allow_hidden: bool) -> Vec<String> {
     let path_str_iter = paths
         .into_par_iter()
         .map(|p| {
             let is_dir = p.is_dir();
-            p.into_os_string()
-                .into_string()
-                .map_err(|_| anyhow!("Could not convert OsString to a utf-8 String"))
-                .map(|mut s| {
-                    remove_front(&mut s);
-                    if is_dir {
-                        add_dir_slash(&mut s)
-                    }
-                    s
-                })
-        })
-        .filter_map(|r| r.ok()); // only keep Ok values and also unwrap them
+            let res = p.into_os_string().into_string();
 
-        if !allow_hidden {
-            filter_hidden(path_str_iter).collect()
-        } else {
-            path_str_iter.collect()
-        }
+            // format string
+            res.map(|mut s| {
+                remove_front(&mut s);
+                if is_dir {
+                    add_dir_slash(&mut s)
+                }
+                s
+            })
+        })
+        // print any errors that have happened
+        .inspect(|res| {
+            if let Some(e) = res.as_ref().err() {
+                eprintln!(
+                    "[bulk-rename error]: Could not convert OsString to a uft-8 String.
+The OsString was {:?}",
+                    e
+                );
+            }
+        })
+        // then discard the errors
+        .filter_map(Result::ok);
+
+    // collect into vec with hidden paths or not
+    if !allow_hidden {
+        filter_hidden(path_str_iter).collect()
+    } else {
+        path_str_iter.collect()
+    }
 }
 
-pub fn filter_hidden(
+fn filter_hidden(
     iter: impl ParallelIterator<Item = String>,
 ) -> impl ParallelIterator<Item = String> {
     iter.filter(|s| !s.starts_with('.'))
 }
 
-fn is_hidden(s: &str) -> bool {
-    s.starts_with('.')
-}
-
-/// removes ./ at the front
 fn remove_front(s: &mut String) {
     if s.starts_with("./") {
         *s = s.chars().skip(2).collect()
@@ -73,11 +90,10 @@ fn add_dir_slash(s: &mut String) {
     s.push('/')
 }
 
-/// renames from slices instead of single items
-/// uses rayon to do it in parallel
-/// this functions returns all the errors that occurred when renaming files
-pub fn bulk_rename(from: &[String], to: &[&str]) -> Vec<anyhow::Error> {
-    from.par_iter()
+/// Renames from slices instead of single items like `std::fs::rename`. This function uses rayon to
+/// rename in parallel. This functions returns a vector of all the errors that have occurred.
+pub fn bulk_rename(from: &[String], to: &[&str]) -> Result<()> {
+    let errors: Vec<anyhow::Error> = from.par_iter()
         .zip(to.par_iter())
         .map(|(f, t)| {
             if f != t {
@@ -86,8 +102,14 @@ pub fn bulk_rename(from: &[String], to: &[&str]) -> Vec<anyhow::Error> {
                 Ok(())
             }
         })
-        .filter_map(|r| r.err()) // only keep error values and unwrap_err them
-        .collect()
+        .filter_map(Result::err) // only keep error values and unwrap_err them
+        .collect();
+
+    if !errors.is_empty() {
+        bail!(combine_errors(errors))
+    } else {
+        Ok(())
+    }
 }
 
 #[cfg(test)]
