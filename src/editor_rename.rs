@@ -90,7 +90,7 @@ impl EditorRename {
             return Ok(());
         }
 
-        let errors = bulk_rename(&self.path_strs, &vec_contents)?;
+        bulk_rename(&self.path_strs, &vec_contents)?;
 
         Ok(())
     }

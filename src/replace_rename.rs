@@ -1,4 +1,5 @@
 use std::path::{Path, PathBuf};
+use std::borrow::Cow;
 
 use crate::filesystem::{bulk_rename, get_string_paths};
 
@@ -27,17 +28,16 @@ impl<'a> ReplaceRename<'a> {
 
     /// Replaces all strings in `self.path_strs` with `self.replace` based on a regex. This
     /// function will return a new vector of path str containing the replace.
-    pub fn replace(&mut self) -> Vec<String> {
+    pub fn replace(&self) -> Vec<Cow<'_, str>> {
         self.path_strs
-            .clone()
-            .into_par_iter()
+            .par_iter()
             .map(|s| {
-                self.regex.replace_all(&s, self.replace).into_owned()
+                self.regex.replace_all(&s, self.replace)
             })
             .collect()
     }
 
-    pub fn rename_using_replace(self, replaced: &[&str]) -> Result<()> {
+    pub fn rename_using_replace(&self, replaced: &[&str]) -> Result<()> {
         bulk_rename(&self.path_strs, replaced)?;
 
         Ok(())

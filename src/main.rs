@@ -9,6 +9,7 @@ mod replace_rename;
 use std::process;
 
 use anyhow::{Context, Result};
+use rayon::prelude::*;
 use structopt::StructOpt;
 
 use editor_rename::EditorRename;
@@ -25,9 +26,10 @@ fn try_main(opt: Opt) -> Result<()> {
         let pattern = opt
             .pattern
             .context("the pattern must if supplied if you are using the rename option")?;
-        let mut replace_rename = ReplaceRename::new(&pattern, &replace, opt.hidden)?;
+        let replace_rename = ReplaceRename::new(&pattern, &replace, opt.hidden)?;
         let replaced = replace_rename.replace();
-        replace_rename.rename_using_replace(&replaced.iter().map(|s| &**s).collect::<Vec<_>>())?;
+        replace_rename
+            .rename_using_replace(&replaced.par_iter().map(|s| &**s).collect::<Vec<_>>())?;
     } else {
         let editor_rename = EditorRename::new(opt.pattern.as_ref(), opt.hidden)?;
         editor_rename.open_editor()?;
