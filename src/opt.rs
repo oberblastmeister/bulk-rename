@@ -13,7 +13,7 @@ pub struct Opt {
 
     /// show error messages with more information
     #[structopt(short, long)]
-    pub debug: bool,
+    pub verbose: bool,
 
     /// the pattern to search for
     pub pattern: Option<String>,
@@ -21,4 +21,8 @@ pub struct Opt {
     /// What to rename a pattern to.
     /// The pattern option must be used if using this option
     pub rename: Option<String>,
+
+    #[structopt(parse(from_os_str))]
+    #[structopt(short, long)]
+    pub directory: Option<PathBuf>,
 }

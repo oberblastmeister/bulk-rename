@@ -1,20 +1,19 @@
-use std::path::{Path, PathBuf};
 use std::borrow::Cow;
 
 use crate::filesystem::{bulk_rename, get_string_paths};
 
-use anyhow::{Context, Result, bail};
+use anyhow::{Context, Result};
 use rayon::prelude::*;
 use regex::Regex;
 
-pub struct ReplaceRename<'a> {
+pub struct ReplaceRename {
     path_strs: Vec<String>,
     regex: Regex,
-    replace: &'a str,
+    replace: String,
 }
 
-impl<'a> ReplaceRename<'a> {
-    pub fn new(pattern: &str, replace: &'a str, allow_hidden: bool) -> Result<Self> {
+impl ReplaceRename {
+    pub fn new(pattern: &str, replace: String, allow_hidden: bool) -> Result<Self> {
         let path_strs = get_string_paths("./", allow_hidden)?;
         let regex = Regex::new(pattern)
             .context(format!("Failed to create regex with pattern {}", pattern))?;
@@ -32,7 +31,7 @@ impl<'a> ReplaceRename<'a> {
         self.path_strs
             .par_iter()
             .map(|s| {
-                self.regex.replace_all(&s, self.replace)
+                self.regex.replace_all(s, self.replace.as_str())
             })
             .collect()
     }

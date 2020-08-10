@@ -1,9 +1,7 @@
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
-use std::{fs, io};
+use std::fs;
 
-use anyhow::{anyhow, Context, Result, bail};
+use anyhow::{Context, Result, bail};
 use rayon::prelude::*;
 
 use crate::errors::combine_errors;
@@ -142,36 +140,6 @@ mod tests {
 
         let paths = get_sorted_paths(".")?;
         assert_eq!(paths, testing_pathbufs_from_strs(testing_strs_dot()));
-
-        Ok(())
-    }
-
-    #[test]
-    fn remove_front_test() {
-        assert_eq!(remove_front(String::from("./intersting")), "intersting");
-    }
-
-    #[test]
-    fn remove_front_test_no_dot() {
-        assert_eq!(remove_front(String::from("wow")), "wow");
-    }
-
-    #[test]
-    fn remove_front_test_wrong_place() {
-        assert_eq!(remove_front(String::from("wrong./place")), "wrong./place");
-    }
-
-    #[test]
-    fn remove_front_test_end() {
-        assert_eq!(remove_front(String::from("attheend./")), "attheend./");
-    }
-
-    #[test]
-    fn convert_test() -> Result<()> {
-        let paths = testing_pathbufs_from_strs(testing_strs_dot());
-        let items = convert_paths_to_string_iter(paths).collect::<Result<Vec<String>>>()?;
-
-        assert_eq!(items, testing_strs());
 
         Ok(())
     }

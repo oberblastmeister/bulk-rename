@@ -4,7 +4,6 @@ use std::io::Write;
 use std::process::Command;
 
 use anyhow::{bail, ensure, Context, Result};
-use rayon::prelude::*;
 use tempfile::NamedTempFile;
 
 use crate::filesystem::{bulk_rename, get_string_paths};

@@ -6,6 +6,7 @@ mod opt;
 mod regex;
 mod replace_rename;
 
+use std::env;
 use std::process;
 
 use anyhow::{Context, Result};
@@ -22,11 +23,20 @@ use replace_rename::ReplaceRename;
 static GLOBAL: jemallocator::Jemalloc = jemallocator::Jemalloc;
 
 fn try_main(opt: Opt) -> Result<()> {
+    // set working directory
+    if let Some(directory) = opt.directory {
+        env::set_current_dir(&directory).context(format!(
+            "Failed to change working directory to {}",
+            &directory.display()
+        ))?;
+    }
+
+    // decide if using replace rename or editor rename
     if let Some(replace) = opt.rename {
         let pattern = opt
             .pattern
             .context("the pattern must if supplied if you are using the rename option")?;
-        let replace_rename = ReplaceRename::new(&pattern, &replace, opt.hidden)?;
+        let replace_rename = ReplaceRename::new(&pattern, replace, opt.hidden)?;
         let replaced = replace_rename.replace();
         replace_rename
             .rename_using_replace(&replaced.par_iter().map(|s| &**s).collect::<Vec<_>>())?;
@@ -41,7 +51,7 @@ fn try_main(opt: Opt) -> Result<()> {
 
 fn main() {
     let opt = Opt::from_args();
-    let debug_mode = opt.debug;
+    let debug_mode = opt.verbose;
 
     match try_main(opt) {
         Ok(()) => process::exit(ExitCode::Success.into()),
