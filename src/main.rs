@@ -14,13 +14,14 @@ use rayon::prelude::*;
 use structopt::StructOpt;
 
 use editor_rename::EditorRename;
+use errors::print_error;
 use exit_codes::ExitCode;
 use opt::Opt;
 use replace_rename::ReplaceRename;
 
 #[cfg(not(target_env = "msvc"))]
 #[global_allocator]
-static GLOBAL: jemallocator::Jemalloc = jemallocator::Jemalloc;
+static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
 
 fn try_main(opt: Opt) -> Result<()> {
     // set working directory
@@ -51,16 +52,11 @@ fn try_main(opt: Opt) -> Result<()> {
 
 fn main() {
     let opt = Opt::from_args();
-    let debug_mode = opt.verbose;
 
     match try_main(opt) {
         Ok(()) => process::exit(ExitCode::Success.into()),
         Err(e) => {
-            if debug_mode {
-                eprintln!("[bulk-rename error]: {:?}", e);
-            } else {
-                eprintln!("[bulk-rename error]: {}", e);
-            }
+            print_error(e.to_string());
             process::exit(ExitCode::GeneralError.into())
         }
     }

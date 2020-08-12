@@ -1,10 +1,10 @@
-use std::path::{Path, PathBuf};
 use std::fs;
+use std::path::{Path, PathBuf};
 
-use anyhow::{Context, Result, bail};
+use anyhow::{bail, Context, Result};
 use rayon::prelude::*;
 
-use crate::errors::combine_errors;
+use crate::errors::{anyhow_multiple, print_error};
 
 /// Gets a string representation of the paths in the specified directory.
 pub fn get_string_paths(dir: impl AsRef<Path>, allow_hidden: bool) -> Result<Vec<String>> {
@@ -21,7 +21,7 @@ fn get_sorted_paths(dir: impl AsRef<Path>) -> Result<Vec<PathBuf>> {
         .map(|res| res.map(|e| e.path()))
         .inspect(|res| {
             if let Some(e) = res.as_ref().err() {
-                eprintln!("[bulk-rename error]: failed to read an entry, {:?}", e);
+                print_error(format!("failed to read an entry, {:?}", e))
             }
         })
         .filter_map(Result::ok)
@@ -54,11 +54,10 @@ fn convert_paths_to_string_iter(paths: Vec<PathBuf>, allow_hidden: bool) -> Vec<
         // print any errors that have happened
         .inspect(|res| {
             if let Some(e) = res.as_ref().err() {
-                eprintln!(
-                    "[bulk-rename error]: Could not convert OsString to a uft-8 String.
-The OsString was {:?}",
+                print_error(format!(
+                    "Could not convert OsString to a uft-8 String. The OsString was {:?}",
                     e
-                );
+                ))
             }
         })
         // then discard the errors
@@ -91,7 +90,8 @@ fn add_dir_slash(s: &mut String) {
 /// Renames from slices instead of single items like `std::fs::rename`. This function uses rayon to
 /// rename in parallel. This functions returns a vector of all the errors that have occurred.
 pub fn bulk_rename(from: &[String], to: &[&str]) -> Result<()> {
-    let errors: Vec<anyhow::Error> = from.par_iter()
+    let errors: Vec<anyhow::Error> = from
+        .par_iter()
         .zip(to.par_iter())
         .map(|(f, t)| {
             if f != t {
@@ -104,7 +104,7 @@ pub fn bulk_rename(from: &[String], to: &[&str]) -> Result<()> {
         .collect();
 
     if !errors.is_empty() {
-        bail!(combine_errors(errors))
+        bail!(anyhow_multiple(errors))
     } else {
         Ok(())
     }

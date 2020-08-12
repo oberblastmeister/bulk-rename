@@ -1,13 +1,18 @@
 use rayon::prelude::*;
+use colored::Colorize;
 
-pub fn combine_errors(errors: Vec<anyhow::Error>) -> String {
+pub fn print_error(msg: impl Into<String>) {
+    eprintln!("{}: {}", "Error".red().bold(), msg.into());
+}
+
+pub fn anyhow_multiple(errors: Vec<anyhow::Error>) -> String {
     format!(
         "\n{}",
         errors
             .into_par_iter()
             .map(|e| format!("{:?}", e))
             .collect::<Vec<_>>()
-            .join("\n\n[bulk-rename error]:\n")
+            .join(&format!("\n\n{}:\n", "Error".red().bold()))
     )
 }
 
