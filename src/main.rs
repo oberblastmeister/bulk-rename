@@ -3,7 +3,7 @@ mod errors;
 mod exit_codes;
 mod filesystem;
 mod opt;
-mod regex;
+mod regex_helper;
 mod replace_rename;
 
 use std::env;
@@ -13,8 +13,8 @@ use anyhow::{Context, Result};
 use rayon::prelude::*;
 use structopt::StructOpt;
 
-use editor_rename::EditorRename;
 use errors::print_error;
+use editor_rename::run_editor_rename;
 use exit_codes::ExitCode;
 use opt::Opt;
 use replace_rename::ReplaceRename;
@@ -42,9 +42,7 @@ fn try_main(opt: Opt) -> Result<()> {
         replace_rename
             .rename_using_replace(&replaced.par_iter().map(|s| &**s).collect::<Vec<_>>())?;
     } else {
-        let editor_rename = EditorRename::new(opt.pattern.as_ref(), opt.hidden)?;
-        editor_rename.open_editor()?;
-        editor_rename.rename_using_file()?;
+        run_editor_rename(opt.pattern.as_deref(), opt.hidden)?;
     }
 
     Ok(())
